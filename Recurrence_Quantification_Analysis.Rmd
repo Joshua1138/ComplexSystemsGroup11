@@ -1,0 +1,188 @@
+---
+title: "Complex Systems Analysis"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load the packages needed
+```{r message=FALSE, warning=FALSE}
+library(crqa)
+library(readr)
+library(pracma)
+library(tseriesChaos)
+library(nonlinearTseries)
+library(tidyverse)
+```
+
+# Analyse matches from player_time.csv
+```{r}
+# Parameters
+window_size <- 10
+step <- 1
+# Change num_matches based on how many matches to analyse (max 49999)
+num_matches <- 10000
+
+# Keep track of how many matches are excludes
+num <- 0
+
+# Initialize lists for DET and ENTR
+det_gold_all <- list()
+det_xp_all <- list()
+det_lh_all <- list()
+
+ent_gold_all <- list()
+ent_xp_all <- list()
+ent_lh_all <- list()
+
+for (id in 0:(num_matches - 1)) {
+  # Check gold/xp/lh per player per match
+  gold_0 <- player_time$gold_t_0[player_time$match_id == id]
+  gold_1 <- player_time$gold_t_1[player_time$match_id == id]
+  gold_2 <- player_time$gold_t_2[player_time$match_id == id]
+  gold_3 <- player_time$gold_t_3[player_time$match_id == id]
+  gold_4 <- player_time$gold_t_4[player_time$match_id == id]
+  gold_0_t2 <- player_time$gold_t_128[player_time$match_id == id]
+  gold_1_t2 <- player_time$gold_t_129[player_time$match_id == id]
+  gold_2_t2 <- player_time$gold_t_130[player_time$match_id == id]
+  gold_3_t2 <- player_time$gold_t_131[player_time$match_id == id]
+  gold_4_t2 <- player_time$gold_t_132[player_time$match_id == id]
+  xp_0 <- player_time$xp_t_0 [player_time$match_id == id]
+  xp_1 <- player_time$xp_t_1 [player_time$match_id == id]
+  xp_2 <- player_time$xp_t_2 [player_time$match_id == id]
+  xp_3 <- player_time$xp_t_3 [player_time$match_id == id]
+  xp_4 <- player_time$xp_t_4 [player_time$match_id == id]
+  xp_0_t2 <- player_time$xp_t_128 [player_time$match_id == id]
+  xp_1_t2 <- player_time$xp_t_129 [player_time$match_id == id]
+  xp_2_t2 <- player_time$xp_t_130 [player_time$match_id == id]
+  xp_3_t2 <- player_time$xp_t_131 [player_time$match_id == id]
+  xp_4_t2 <- player_time$xp_t_132 [player_time$match_id == id]
+  lh_0 <- player_time$lh_t_0 [player_time$match_id == id]
+  lh_1 <- player_time$lh_t_1 [player_time$match_id == id]
+  lh_2 <- player_time$lh_t_2 [player_time$match_id == id]
+  lh_3 <- player_time$lh_t_3 [player_time$match_id == id]
+  lh_4 <- player_time$lh_t_4 [player_time$match_id == id]
+  lh_0_t2 <- player_time$lh_t_128 [player_time$match_id == id]
+  lh_1_t2 <- player_time$lh_t_129 [player_time$match_id == id]
+  lh_2_t2 <- player_time$lh_t_130 [player_time$match_id == id]
+  lh_3_t2 <- player_time$lh_t_131 [player_time$match_id == id]
+  lh_4_t2 <- player_time$lh_t_132 [player_time$match_id == id]
+  
+  # Calculate averages for both teams
+  team1_avg_gold <- rowMeans(cbind(gold_0, gold_1, gold_2, gold_3, gold_4))
+  team2_avg_gold <- rowMeans(cbind(gold_0_t2, gold_1_t2, gold_2_t2, gold_3_t2, gold_4_t2))
+  
+  team1_avg_xp <- rowMeans(cbind(xp_0, xp_1, xp_2, xp_3, xp_4))
+  team2_avg_xp <- rowMeans(cbind(xp_0_t2, xp_1_t2, xp_2_t2, xp_3_t2, xp_4_t2))
+  
+  team1_avg_lh <- rowMeans(cbind(lh_0, lh_1, lh_2, lh_3, lh_4))
+  team2_avg_lh <- rowMeans(cbind(lh_0_t2, lh_1_t2, lh_2_t2, lh_3_t2, lh_4_t2))
+  
+  # Calculate difference in average
+  gold_diff <- team1_avg_gold - team2_avg_gold
+  xp_diff <- team1_avg_xp - team2_avg_xp
+  lh_diff <- team1_avg_lh - team2_avg_lh
+  
+  # Skip match if shorter than 30 minutes or longer than 60
+  if (length(gold_diff) < 30 || length(gold_diff) > 60) {
+    num <- num + 1
+    next
+  }
+
+  # Create datafromes for determinism and entropy
+  match_det_gold <- numeric()
+  match_det_xp <- numeric()
+  match_det_lh <- numeric()
+  
+  match_ent_gold <- numeric()
+  match_ent_xp <- numeric()
+  match_ent_lh <- numeric()
+
+  for (i in seq(0, length(gold_diff) - window_size, by = step)) {
+    
+    # Calculate rqa for each time window
+    gold_window <- gold_diff[i + (1:window_size)]
+    xp_window <- xp_diff[i + (1:window_size)]
+    lh_window <- lh_diff[i + (1:window_size)]
+
+    rqa_gold <- crqa(ts1 = gold_window, ts2 = gold_window,
+                     delay = 1, embed = 2, rescale = 1,
+                     radius = 0.5, normalize = 0, mindiagline = 2)
+
+    rqa_xp <- crqa(ts1 = xp_window, ts2 = xp_window,
+                   delay = 1, embed = 2, rescale = 1,
+                   radius = 0.5, normalize = 0, mindiagline = 2)
+    
+    rqa_lh <- crqa(ts1 = lh_window, ts2 = lh_window,
+                   delay = 1, embed = 2, rescale = 1,
+                   radius = 0.5, normalize = 0, mindiagline = 2)
+
+    match_det_gold <- c(match_det_gold, rqa_gold$DET)
+    match_det_xp <- c(match_det_xp, rqa_xp$DET)
+    match_det_lh <- c(match_det_lh, rqa_lh$DET)
+    
+    match_ent_gold <- c(match_ent_gold, rqa_gold$ENTR)
+    match_ent_xp <- c(match_ent_xp, rqa_xp$ENTR)
+    match_ent_lh <- c(match_ent_lh, rqa_lh$ENTR)
+  }
+
+  # Store per match
+  det_gold_all[[id + 1]] <- match_det_gold
+  det_xp_all[[id + 1]] <- match_det_xp
+  det_lh_all[[id + 1]] <- match_det_lh
+  
+  ent_gold_all[[id + 1]] <- match_ent_gold
+  ent_xp_all[[id + 1]] <- match_ent_xp
+  ent_lh_all[[id + 1]] <- match_ent_lh
+}
+
+# Create matrix to calculate averages
+det_gold_matrix <- do.call(rbind, det_gold_all)
+det_xp_matrix <- do.call(rbind, det_xp_all)
+det_lh_matrix <- do.call(rbind, det_lh_all)
+
+ent_gold_matrix <- do.call(rbind, ent_gold_all)
+ent_xp_matrix <- do.call(rbind, ent_xp_all)
+ent_lh_matrix <- do.call(rbind, ent_lh_all)
+
+# Average across matches
+avg_det_gold <- colMeans(det_gold_matrix, na.rm = TRUE)
+avg_det_xp <- colMeans(det_xp_matrix, na.rm = TRUE)
+avg_det_lh <- colMeans(det_lh_matrix, na.rm = TRUE)
+
+avg_ent_gold <- colMeans(ent_gold_matrix, na.rm = TRUE)
+avg_ent_xp <- colMeans(ent_xp_matrix, na.rm = TRUE)
+avg_ent_lh <- colMeans(ent_lh_matrix, na.rm = TRUE)
+
+# Time axis
+time <- seq(0, length(avg_det_gold) - 1)
+
+# Plot
+ggplot(data.frame(time, DET = avg_det_gold), aes(x = time, y = DET)) +
+  geom_line(color = "red") +
+  labs(title = "Average Gold Determinism", y = "Average DET", x = "Time Window")
+
+ggplot(data.frame(time, DET = avg_det_xp), aes(x = time, y = DET)) +
+  geom_line(color = "blue") +
+  labs(title = "Average XP Determinism", y = "Average DET", x = "Time Window")
+
+ggplot(data.frame(time, DET = avg_det_lh), aes(x = time, y = DET)) +
+  geom_line(color = "gold") +
+  labs(title = "Average Last Hit Determinism", y = "Average DET", x = "Time Window")
+
+ggplot(data.frame(time, ENTR = avg_ent_gold), aes(x = time, y = ENTR)) +
+  geom_line(color = "red") +
+  labs(title = "Average Gold Entropy", y = "Average ENTR", x = "Time Window")
+
+ggplot(data.frame(time, ENTR = avg_ent_xp), aes(x = time, y = ENTR)) +
+  geom_line(color = "blue") +
+  labs(title = "Average XP Entropy", y = "Average ENTR", x = "Time Window")
+
+ggplot(data.frame(time, ENTR = avg_ent_lh), aes(x = time, y = ENTR)) +
+  geom_line(color = "gold") +
+  labs(title = "Average Last Hit Entropy", y = "Average ENTR", x = "Time Window")
+
+print(num)
+```
